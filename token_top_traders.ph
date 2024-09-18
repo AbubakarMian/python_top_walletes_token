@@ -19,20 +19,29 @@ def get_data_from_page(url):
     options = Options()
     options.headless = False  # Keep browser visible for debugging
 
-    # Start WebDriver instance
+    #options = Options()
+    #options.headless = False  # Headless mode for visibility, keep this False if you need to see the browser
+    options.add_argument('--disable-gpu')  # Disables GPU hardware acceleration, often helps with stability
+    options.add_argument('--no-sandbox')   # Helps in environments like Docker, where sandboxing might cause issues
+    options.add_argument('--disable-dev-shm-usage')  # Useful in environments with limited shared memory
+    options.add_argument('--remote-debugging-port=9222')  # Adds debugging port for Chrome
+
+    # Start WebDriver instance with these options
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+    #driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
     try:
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
-
+        time.sleep(3)
         # Wait for the button to be clickable (increase timeout if necessary)
-        wait = WebDriverWait(driver, 30)  # Increased to 30 seconds
+        wait = WebDriverWait(driver, 90)  # Increased to 30 seconds
 
         # Define the button XPath and wait for it to be clickable
         button_xpath = '/html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
         button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath)))
-
+        
         logging.debug('Button found, clicking it.')
         button.click()  # Click the button
         logging.debug('Button clicked.')
@@ -59,29 +68,48 @@ def get_data_from_page(url):
 
         data = []
         for i, row in enumerate(rows):
-            #div_pnl = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]")
-            div_pnl = WebDriverWait(row, 10).until(
-                EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"))
-            )
-            pnl_div = div_pnl.text.strip()
-            #div_address = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a")
-            div_address = WebDriverWait(row, 10).until(
-                EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]"))
-            )
-            address_href = div_address.get_attribute('href')
+            try:
+                # Check if the PNL div exists before waiting for it
+                pnl_div = None
+                if row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"):
+                    div_pnl = WebDriverWait(row, 20).until(
+                        EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"))
+                    )
+                    pnl_div = div_pnl.text.strip()
+                else:
+                    logging.debug(f'PNL div not found in row {i}')
+                    pnl_div = 'N/A'  # Fallback value if PNL div is missing
 
-            data.append({'address_href': address_href, 'pnl': pnl_div})
-            logging.debug(f'ddd Row {i} - address_href={address_href}, pnl={pnl_div}')
+                # Check if the address div exists before waiting for it
+                address = None
+                if row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a"):
+                    div_address = WebDriverWait(row, 20).until(
+                        EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a"))
+                    )
+                    url = div_address.get_attribute('href')
+                    address = url.split('/')[-1]  # Extract the last part of the URL
+                else:
+                    logging.debug(f'Address div not found in row {i}')
+                    address = 'N/A'  # Fallback value if Address div is missing
+
+                # Append data to the list
+                data.append({'address_href': address, 'pnl': pnl_div})
+                logging.debug(f'Row {i} - address={address}, pnl={pnl_div}')
+
+            except Exception as e:
+                logging.error(f'Error in row {i}: {str(e)}')
+
 
         # Add a pause for debugging purposes if you want to inspect the browser manually
         time.sleep(30)  # Pause for 30 seconds (adjust as necessary)
 
     except Exception as e:
+        logging.error(f'ddddddError occurred: {str(e)}', exc_info=True)
         logging.error(f'Error occurred: {str(e)}')
         raise
     finally:
         logging.debug('Driver not quitting (for debugging).')
-
+        driver.quit() 
     return data
 
 
