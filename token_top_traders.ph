@@ -7,6 +7,7 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support import expected_conditions as EC
 import logging
+import time  # For manual debugging pause
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -14,50 +15,72 @@ logging.basicConfig(level=logging.DEBUG)
 def get_data_from_page(url):
     logging.debug('Starting get_data_from_page function.')
 
+    # Set headless to False to view browser window and increase wait times for page load
     options = Options()
-    options.headless = True
+    options.headless = False  # Keep browser visible for debugging
+
+    # Start WebDriver instance
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
     try:
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
 
-        # Use an explicit wait for the table element to be loaded
-        wait = WebDriverWait(driver, 20)  # Extend the wait time if necessary
-        table_xpath = '//*[@id="root"]/div/main/div/div/div[2]/div[1]/div[2]/div/div[1]/div[2]/div/div/div/div/table'
-        table = wait.until(EC.presence_of_element_located((By.XPATH, table_xpath)))
-        logging.debug('Table found.')
+        # Wait for the button to be clickable (increase timeout if necessary)
+        wait = WebDriverWait(driver, 30)  # Increased to 30 seconds
 
-        # Ensure rows are present
-        rows = table.find_elements(By.XPATH, './/tr')
+        # Define the button XPath and wait for it to be clickable
+        button_xpath = '/html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
+        button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath)))
+
+        logging.debug('Button found, clicking it.')
+        button.click()  # Click the button
+        logging.debug('Button clicked.')
+
+        # Now wait for the new content (table) to be loaded after clicking the button
+        div_table_xpath = '/html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[2]/div[2]'
+        div_table = wait.until(EC.visibility_of_element_located((By.XPATH, div_table_xpath)))
+
+        # Optional: Scroll into view if the table might be out of the viewport
+        driver.execute_script("arguments[0].scrollIntoView(true);", div_table)
+
+        # Get the HTML content of the table to verify it has loaded correctly
+        html_content = div_table.get_attribute('outerHTML')
+        logging.debug('Table found after button click.')
+        logging.debug(f'Table HTML: {html_content}')  # This will help with debugging
+
+        # Wait for the rows with the specific class inside the table and ensure they are visible
+        rows = wait.until(EC.visibility_of_all_elements_located((By.XPATH, ".//div[contains(@class, 'custom-1nvxwu0')]")))
+
+        # Optional: Loop through the rows and print the content for verification
+        for row in rows:
+            logging.debug(f'Row content: {row.text}')
         logging.debug(f'Found {len(rows)} rows.')
 
         data = []
         for i, row in enumerate(rows):
-            tds = row.find_elements(By.XPATH, './/td')
-            logging.debug(f'Row {i} - Number of <td> elements: {len(tds)}')
+            #div_pnl = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]")
+            div_pnl = WebDriverWait(row, 10).until(
+                EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"))
+            )
+            pnl_div = div_pnl.text.strip()
+            #div_address = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a")
+            div_address = WebDriverWait(row, 10).until(
+                EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]"))
+            )
+            address_href = div_address.get_attribute('href')
 
-            if len(tds) >= 1:
-                # Extract the div elements from the <td>
-                data_list = tds[0].find_elements(By.XPATH, './/div')
+            data.append({'address_href': address_href, 'pnl': pnl_div})
+            logging.debug(f'ddd Row {i} - address_href={address_href}, pnl={pnl_div}')
 
-                # Check if data_list has at least two elements
-                if len(data_list) >= 2:
-                    pnl_div = data_list[0].text.strip()
-                    address_div = data_list[1].text.strip()
-                    data.append({'address': address_div, 'pnl': pnl_div})
-                    logging.debug(f'Added data: address={address_div}, pnl={pnl_div}')
-                else:
-                    logging.warning(f'Row {i} does not have enough <div> elements.')
-            else:
-                logging.warning(f'Row {i} does not contain enough <td> elements.')
+        # Add a pause for debugging purposes if you want to inspect the browser manually
+        time.sleep(30)  # Pause for 30 seconds (adjust as necessary)
 
     except Exception as e:
         logging.error(f'Error occurred: {str(e)}')
         raise
     finally:
-        driver.quit()
-        logging.debug('Driver quit.')
+        logging.debug('Driver not quitting (for debugging).')
 
     return data
 
