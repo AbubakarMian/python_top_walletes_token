@@ -17,10 +17,7 @@ def get_data_from_page(url):
 
     # Set headless to False to view browser window and increase wait times for page load
     options = Options()
-    options.headless = False  # Keep browser visible for debugging
-
-    #options = Options()
-    #options.headless = False  # Headless mode for visibility, keep this False if you need to see the browser
+    options.headless = True  # Keep browser visible for debugging
     options.add_argument('--disable-gpu')  # Disables GPU hardware acceleration, often helps with stability
     options.add_argument('--no-sandbox')   # Helps in environments like Docker, where sandboxing might cause issues
     options.add_argument('--disable-dev-shm-usage')  # Useful in environments with limited shared memory
@@ -29,23 +26,17 @@ def get_data_from_page(url):
     # Start WebDriver instance with these options
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-    #driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
     try:
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
-        time.sleep(1)
-        # Wait for the button to be clickable (increase timeout if necessary)
-        wait = WebDriverWait(driver, 1)  # Increased to 30 seconds
+        #time.sleep(1)
+        wait = WebDriverWait(driver, 10)  # Increased to 10 seconds
 
         # Define the button XPath and wait for it to be clickable
-        button_xpath = '/html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
+        button_xpath = '//*[@id="root"]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
         button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath)))
         
-        logging.debug('Button found, clicking it.')
-        button.click()  # Click the button
-        logging.debug('Button clicked.')
-
+        button.click()
         # Now wait for the new content (table) to be loaded after clicking the button
         div_table_xpath = '/html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[2]/div[2]'
         div_table = wait.until(EC.visibility_of_element_located((By.XPATH, div_table_xpath)))
@@ -54,7 +45,7 @@ def get_data_from_page(url):
         driver.execute_script("arguments[0].scrollIntoView(true);", div_table)
 
         # Get the HTML content of the table to verify it has loaded correctly
-        html_content = div_table.get_attribute('outerHTML')
+        #html_content = div_table.get_attribute('outerHTML')
         
         rows = wait.until(EC.visibility_of_all_elements_located((By.XPATH, ".//div[contains(@class, 'custom-1nvxwu0')]")))
 
@@ -83,7 +74,6 @@ def get_data_from_page(url):
 
                 # Terminate the loop if the data length reaches 5
                 if len(data) >= 5:
-                    logging.debug('Collected 5 valid rows, terminating loop.')
                     break
 
             except Exception as e:
@@ -94,7 +84,6 @@ def get_data_from_page(url):
         logging.error(f'Error occurred: {str(e)}')
         raise
     finally:
-        logging.debug('Driver not quitting (for debugging).')
         driver.quit() 
     return data
 
