@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support import expected_conditions as EC
 import logging
-import time  # For manual debugging pause
+import time  
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -34,9 +34,9 @@ def get_data_from_page(url):
     try:
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
-        time.sleep(3)
+        time.sleep(1)
         # Wait for the button to be clickable (increase timeout if necessary)
-        wait = WebDriverWait(driver, 90)  # Increased to 30 seconds
+        wait = WebDriverWait(driver, 1)  # Increased to 30 seconds
 
         # Define the button XPath and wait for it to be clickable
         button_xpath = '/html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
@@ -55,53 +55,39 @@ def get_data_from_page(url):
 
         # Get the HTML content of the table to verify it has loaded correctly
         html_content = div_table.get_attribute('outerHTML')
-        logging.debug('Table found after button click.')
-        logging.debug(f'Table HTML: {html_content}')  # This will help with debugging
-
-        # Wait for the rows with the specific class inside the table and ensure they are visible
+        
         rows = wait.until(EC.visibility_of_all_elements_located((By.XPATH, ".//div[contains(@class, 'custom-1nvxwu0')]")))
 
-        # Optional: Loop through the rows and print the content for verification
-        for row in rows:
-            logging.debug(f'Row content: {row.text}')
-        logging.debug(f'Found {len(rows)} rows.')
-
         data = []
+
         for i, row in enumerate(rows):
             try:
-                # Check if the PNL div exists before waiting for it
-                pnl_div = None
-                if row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"):
-                    div_pnl = WebDriverWait(row, 20).until(
-                        EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"))
-                    )
-                    pnl_div = div_pnl.text.strip()
-                else:
-                    logging.debug(f'PNL div not found in row {i}')
-                    pnl_div = 'N/A'  # Fallback value if PNL div is missing
+                if not row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"):
+                    continue
 
-                # Check if the address div exists before waiting for it
-                address = None
-                if row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a"):
-                    div_address = WebDriverWait(row, 20).until(
-                        EC.visibility_of_element_located((By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a"))
-                    )
-                    url = div_address.get_attribute('href')
-                    address = url.split('/')[-1]  # Extract the last part of the URL
-                else:
-                    logging.debug(f'Address div not found in row {i}')
-                    address = 'N/A'  # Fallback value if Address div is missing
+                div_pnl = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]")
+                pnl_div = div_pnl.text.strip()
 
-                # Append data to the list
-                data.append({'address_href': address, 'pnl': pnl_div})
+                # Check if the address div exists, and skip if not
+                if not row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a"):
+                    continue
+
+                # If the address div is present, extract the address value
+                div_address = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a")
+                url = div_address.get_attribute('href')
+                address = url.split('/')[-1]  # Extract the last part of the URL
+
+                # Append the valid data to the list
+                data.append({'address': address, 'pnl': pnl_div})
                 logging.debug(f'Row {i} - address={address}, pnl={pnl_div}')
+
+                # Terminate the loop if the data length reaches 5
+                if len(data) >= 5:
+                    logging.debug('Collected 5 valid rows, terminating loop.')
+                    break
 
             except Exception as e:
                 logging.error(f'Error in row {i}: {str(e)}')
-
-
-        # Add a pause for debugging purposes if you want to inspect the browser manually
-        time.sleep(30)  # Pause for 30 seconds (adjust as necessary)
 
     except Exception as e:
         logging.error(f'ddddddError occurred: {str(e)}', exc_info=True)
