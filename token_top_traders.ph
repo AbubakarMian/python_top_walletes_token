@@ -12,7 +12,7 @@ import time
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
-def get_data_from_page(url):
+def get_data_from_page(url,limit):
     logging.debug('Starting get_data_from_page function.')
 
     # Set headless to False to view browser window and increase wait times for page load
@@ -30,7 +30,7 @@ def get_data_from_page(url):
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
         #time.sleep(1)
-        wait = WebDriverWait(driver, 10)  # Increased to 10 seconds
+        wait = WebDriverWait(driver, 5)  # Increased to 10 seconds
 
         # Define the button XPath and wait for it to be clickable
         button_xpath = '//*[@id="root"]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
@@ -54,6 +54,7 @@ def get_data_from_page(url):
         for i, row in enumerate(rows):
             try:
                 if not row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"):
+                    break
                     continue
 
                 div_pnl = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]")
@@ -73,7 +74,7 @@ def get_data_from_page(url):
                 logging.debug(f'Row {i} - address={address}, pnl={pnl_div}')
 
                 # Terminate the loop if the data length reaches 5
-                if len(data) >= 5:
+                if len(data) >= limit:
                     break
 
             except Exception as e:
@@ -87,18 +88,28 @@ def get_data_from_page(url):
         driver.quit() 
     return data
 
-
 @app.route('/scrap', methods=['GET'])
 def scrap():
     token = request.args.get('token')
+    limit = request.args.get('limit', 5)  # Default to 5 if no limit is provided
+
+    # Validate the token parameter
     if not token:
         return jsonify({'error': 'Token parameter is required'}), 400
 
+    try:
+        # Convert limit to an integer and validate it's a positive number
+        limit = int(limit)
+        if limit <= 0:
+            raise ValueError('Limit must be a positive integer')
+    except ValueError:
+        return jsonify({'error': 'Limit must be a valid positive integer'}), 400
+
     url = f'https://dexscreener.com/solana/{token}?embed=1&theme=dark&info=1'
-    logging.debug(f'Received request for token: {token}')
+    logging.debug(f'Received request for token: {token} with limit: {limit}')
     
     try:
-        data = get_data_from_page(url)
+        data = get_data_from_page(url, limit)
         logging.debug(f'Retrieved data: {data}')
         return jsonify(data)
     except Exception as e:
