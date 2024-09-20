@@ -30,7 +30,7 @@ def get_data_from_page(url,limit):
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
         #time.sleep(1)
-        wait = WebDriverWait(driver, 5)  # Increased to 10 seconds
+        wait = WebDriverWait(driver, 30)  # Increased to 10 seconds
 
         # Define the button XPath and wait for it to be clickable
         button_xpath = '//*[@id="root"]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
