@@ -36,7 +36,7 @@ def get_data_from_page(url,limit):
         button_xpath = '//*[@id="root"]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
         #button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath)))
         button = wait.until(EC.visibility_of_element_located((By.XPATH, button_xpath)))
-        
+        driver.execute_script("arguments[0].click();", button)
         
         button.click()
         # Now wait for the new content (table) to be loaded after clicking the button
