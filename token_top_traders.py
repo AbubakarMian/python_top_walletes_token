@@ -30,11 +30,13 @@ def get_data_from_page(url,limit):
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
         #time.sleep(1)
-        wait = WebDriverWait(driver, 30)  # Increased to 10 seconds
+        wait = WebDriverWait(driver, 60)  # Increased to 10 seconds
 
         # Define the button XPath and wait for it to be clickable
         button_xpath = '//*[@id="root"]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
-        button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath)))
+        #button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath)))
+        button = wait.until(EC.visibility_of_element_located((By.XPATH, button_xpath)))
+        
         
         button.click()
         # Now wait for the new content (table) to be loaded after clicking the button
