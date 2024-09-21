@@ -25,8 +25,8 @@ def get_data_from_page(url,limit):
     options.add_argument('--remote-debugging-port=9222')  # Adds debugging port for Chrome
 
     # Start WebDriver instance with these options
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options, executable_path=" /usr/bin/google-chrome")
-    
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
     try:
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
