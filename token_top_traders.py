@@ -1,107 +1,93 @@
 from flask import Flask, request, jsonify
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support import expected_conditions as EC
+from playwright.sync_api import sync_playwright
 import logging
-import time  
+import asyncio
+import time
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
-def get_data_from_page(url,limit):
+def get_data_from_page(url, limit):
     logging.debug('Starting get_data_from_page function.')
 
-    # Set headless to False to view browser window and increase wait times for page load
-    options = Options()
-    options.headless = True  # Keep browser visible for debugging
-    #options.add_argument("--headless")
-    options.add_argument('--disable-gpu')  # Disables GPU hardware acceleration, often helps with stability
-    options.add_argument('--no-sandbox')   # Helps in environments like Docker, where sandboxing might cause issues
-    options.add_argument('--disable-dev-shm-usage')  # Useful in environments with limited shared memory
-    options.add_argument('--remote-debugging-port=9222')  # Adds debugging port for Chrome
+    with sync_playwright() as p:
+        #browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False, args=[
+            '--no-sandbox',  # Disables the sandboxing for security (needed for some server environments)
+            '--disable-setuid-sandbox',
+            '--disable-blink-features=AutomationControlled',  # Disable automation features to avoid detection
+            '--disable-dev-shm-usage',
+            '--disable-gpu',  # Disable GPU acceleration,
+            '--window-size=1280,720'
+        ])
 
-    # Start WebDriver instance with these options
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        page = browser.new_page()
+        #, wait_until='networkidle'
+        #page.set_user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
-    try:
-        driver.get(url)
+        page.goto(url)
         logging.debug(f'Opened URL: {url}')
-        #time.sleep(1)
-        wait = WebDriverWait(driver, 60)  # Increased to 10 seconds
 
-        # Define the button XPath and wait for it to be clickable
         button_xpath = '//*[@id="root"]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/button[2]'
-        #button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath)))
-        button = wait.until(EC.visibility_of_element_located((By.XPATH, button_xpath)))
-        driver.execute_script("arguments[0].click();", button)
+        page.wait_for_selector(button_xpath)
+        page.click(button_xpath)
+        logging.debug('Button clicked')
+
+        html_content = page.content()
+        logging.debug(html_content)
+        logging.debug('html end Button clicked')
+        # Wait for the new data to load
+        div_table_xpath = "//html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[2]/div[2]"
+        # page.wait_for_selector(div_table_xpath)
+        retries = 5
+        for attempt in range(retries):
+            if page.locator(div_table_xpath).count() > 0:
+                
+                logging.debug(f'Table found on attempt {attempt + 1}')
+                break
+            else:
+                logging.debug(f'Table not found on attempt {attempt + 1}, retrying in 1 second...')
+                page.evaluate(f"document.evaluate('{button_xpath}', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.click();")
+                time.sleep(1)
+        else:
+            logging.error("Table not found after 5 attempts.")
+            return []
         
-        button.click()
-        # Now wait for the new content (table) to be loaded after clicking the button
-        div_table_xpath = '/html/body/div[1]/div/main/div/div/div[2]/div/div[2]/div/div[1]/div[2]/div[2]'
-        div_table = wait.until(EC.visibility_of_element_located((By.XPATH, div_table_xpath)))
-
-        # Optional: Scroll into view if the table might be out of the viewport
-        driver.execute_script("arguments[0].scrollIntoView(true);", div_table)
-
-        # Get the HTML content of the table to verify it has loaded correctly
-        #html_content = div_table.get_attribute('outerHTML')
-        
-        rows = wait.until(EC.visibility_of_all_elements_located((By.XPATH, ".//div[contains(@class, 'custom-1nvxwu0')]")))
-
+        #page.wait_for_selector("div.custom-1nvxwu0")
+        #page.wait_for_selector("div.custom-1nvxwu0", timeout=120000)
+        rows = page.locator("div.custom-1nvxwu0")
+        logging.debug(f'rows count: {rows.count()}')
         data = []
 
-        for i, row in enumerate(rows):
+        for i in range(rows.count()):
             try:
-                if not row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]"):
-                    break
-                    continue
+                pnl_div = rows.nth(i).locator('div.custom-1e9y0rl')
+                address_div = rows.nth(i).locator('div.custom-1dwgrrr a')
 
-                div_pnl = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1e9y0rl')]")
-                pnl_div = div_pnl.text.strip()
+                if pnl_div.count() > 0 and address_div.count() > 0:
+                    pnl_value = pnl_div.inner_text().strip()
+                    address = address_div.get_attribute('href').split('/')[-1]
+                    data.append({'address': address, 'pnl': pnl_value})
+                    logging.debug(f'Row {i} - address={address}, pnl={pnl_value}')
 
-                # Check if the address div exists, and skip if not
-                if not row.find_elements(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a"):
-                    continue
-
-                # If the address div is present, extract the address value
-                div_address = row.find_element(By.XPATH, ".//div[contains(@class, 'custom-1dwgrrr')]/a")
-                url = div_address.get_attribute('href')
-                address = url.split('/')[-1]  # Extract the last part of the URL
-
-                # Append the valid data to the list
-                data.append({'address': address, 'pnl': pnl_div})
-                logging.debug(f'Row {i} - address={address}, pnl={pnl_div}')
-
-                # Terminate the loop if the data length reaches 5
-                if len(data) >= limit:
-                    break
-
+                    if len(data) >= limit:
+                        break
             except Exception as e:
                 logging.error(f'Error in row {i}: {str(e)}')
 
-    except Exception as e:
-        logging.error(f'ddddddError occurred: {str(e)}', exc_info=True)
-        logging.error(f'Error occurred: {str(e)}')
-        raise
-    finally:
-        driver.quit() 
+        browser.close()
     return data
+
 
 @app.route('/scrap', methods=['GET'])
 def scrap():
     token = request.args.get('token')
-    limit = request.args.get('limit', 5)  # Default to 5 if no limit is provided
+    limit = request.args.get('limit', 5)
 
-    # Validate the token parameter
     if not token:
         return jsonify({'error': 'Token parameter is required'}), 400
 
     try:
-        # Convert limit to an integer and validate it's a positive number
         limit = int(limit)
         if limit <= 0:
             raise ValueError('Limit must be a positive integer')
@@ -110,7 +96,7 @@ def scrap():
 
     url = f'https://dexscreener.com/solana/{token}?embed=1&theme=dark&info=1'
     logging.debug(f'Received request for token: {token} with limit: {limit}')
-    
+
     try:
         data = get_data_from_page(url, limit)
         logging.debug(f'Retrieved data: {data}')
@@ -119,7 +105,5 @@ def scrap():
         logging.error(f'Error in /scrap route: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)
-    #app.run(debug=True)
