@@ -18,14 +18,15 @@ def get_data_from_page(url,limit):
     # Set headless to False to view browser window and increase wait times for page load
     options = Options()
     options.headless = True  # Keep browser visible for debugging
+    #options.add_argument("--headless")
     options.add_argument('--disable-gpu')  # Disables GPU hardware acceleration, often helps with stability
     options.add_argument('--no-sandbox')   # Helps in environments like Docker, where sandboxing might cause issues
     options.add_argument('--disable-dev-shm-usage')  # Useful in environments with limited shared memory
     options.add_argument('--remote-debugging-port=9222')  # Adds debugging port for Chrome
 
     # Start WebDriver instance with these options
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options, executable_path=" /usr/bin/google-chrome")
+    
     try:
         driver.get(url)
         logging.debug(f'Opened URL: {url}')
